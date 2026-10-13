@@ -176,10 +176,9 @@ object RecordingStateManager {
     }
 
     /*
-     * Dispatches floating camera toggle command to the recording service.
+     * Dispatches floating camera toggle command.
      */
     fun toggleCamera(context: Context) {
-        if (!isRecording) return
         if (isCameraActive) {
             context.stopService(Intent(context, CameraOverlayService::class.java))
         } else {

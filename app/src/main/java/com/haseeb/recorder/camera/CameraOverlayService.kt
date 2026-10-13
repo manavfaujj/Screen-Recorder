@@ -60,6 +60,20 @@ class CameraOverlayService : Service() {
 
         @Volatile var isCameraRunning = false
             private set
+
+        fun switchCamera(context: Context) {
+            val intent = Intent(context, CameraOverlayService::class.java).apply {
+                action = ACTION_SWITCH
+            }
+            context.startService(intent)
+        }
+
+        fun stopCamera(context: Context) {
+            val intent = Intent(context, CameraOverlayService::class.java).apply {
+                action = ACTION_STOP
+            }
+            context.startService(intent)
+        }
     }
 
     private enum class ScreenQuadrant {
@@ -147,10 +161,7 @@ class CameraOverlayService : Service() {
                 if (!isCameraRunning && !stopping) {
                     try {
                         startCameraForeground()
-                        if (!RecordingStateManager.isRecording) {
-                            stopping = true
-                            stopSelf()
-                        } else if (createOverlay()) {
+                        if (createOverlay()) {
                             isCameraRunning = true
                             notifyCameraState()
                             openCamera()

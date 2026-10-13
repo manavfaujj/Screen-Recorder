@@ -206,7 +206,8 @@ class ScreenRecordService : Service() {
         screenWidth = targetRes.first
         screenHeight = targetRes.second
 
-        val widthRatio = screenWidth.toFloat() / physicalMaxRes.first.toFloat()
+        val baseRef = if (screenWidth <= screenHeight) minOf(physicalMaxRes.first, physicalMaxRes.second) else maxOf(physicalMaxRes.first, physicalMaxRes.second)
+        val widthRatio = screenWidth.toFloat() / baseRef.toFloat()
         scaledDensity = (screenDensity * widthRatio).toInt().coerceAtLeast(120)
     }
 
@@ -359,7 +360,8 @@ class ScreenRecordService : Service() {
         val targetRes = configManager.getScaledResolution()
         screenWidth = targetRes.first
         screenHeight = targetRes.second
-        val widthRatio = screenWidth.toFloat() / physicalMaxRes.first.toFloat()
+        val baseRef = if (screenWidth <= screenHeight) minOf(physicalMaxRes.first, physicalMaxRes.second) else maxOf(physicalMaxRes.first, physicalMaxRes.second)
+        val widthRatio = screenWidth.toFloat() / baseRef.toFloat()
         scaledDensity = (screenDensity * widthRatio).toInt().coerceAtLeast(120)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
@@ -435,18 +437,52 @@ class ScreenRecordService : Service() {
                 start()
             }
 
-            if (configManager.videoOrientation == ConfigManager.ORIENTATION_AUTO) {
-                captureScale = screenWidth.toDouble() / physicalMaxRes.first
-                captureWidth = screenWidth
-                captureHeight = screenHeight
-                rotationRenderer = AutoRotationRenderer(checkNotNull(inputSurface), screenWidth, screenHeight) { error ->
-                    mainHandler.post {
-                        Log.e(TAG, "Rotation rendering failed", error)
-                        stopRecording()
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
-                    }
+            val is16By9 = configManager.is16By9AspectRatio
+            val needsRenderer = is16By9 || configManager.videoOrientation == ConfigManager.ORIENTATION_AUTO
+
+            val initialCaptureSize = if (is16By9) {
+                val physMin = minOf(physicalMaxRes.first, physicalMaxRes.second)
+                val physMax = maxOf(physicalMaxRes.first, physicalMaxRes.second)
+                if (screenWidth <= screenHeight) {
+                    val scale = screenWidth.toDouble() / physMin.toDouble()
+                    captureScale = scale
+                    val w = screenWidth
+                    var h = (physMax * scale).toInt()
+                    if (h % 2 != 0) h--
+                    w to h
+                } else {
+                    val scale = screenHeight.toDouble() / physMin.toDouble()
+                    captureScale = scale
+                    var w = (physMax * scale).toInt()
+                    if (w % 2 != 0) w--
+                    val h = screenHeight
+                    w to h
                 }
+            } else {
+                captureScale = screenWidth.toDouble() / physicalMaxRes.first
+                screenWidth to screenHeight
+            }
+
+            captureWidth = initialCaptureSize.first
+            captureHeight = initialCaptureSize.second
+
+            if (needsRenderer) {
+                rotationRenderer = AutoRotationRenderer(
+                    encoderSurface = checkNotNull(inputSurface),
+                    canvasWidth = screenWidth,
+                    canvasHeight = screenHeight,
+                    initialCaptureWidth = captureWidth,
+                    initialCaptureHeight = captureHeight,
+                    cropToFill = is16By9,
+                    onFailure = { error ->
+                        mainHandler.post {
+                            Log.e(TAG, "Rotation rendering failed", error)
+                            stopRecording()
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf()
+                        }
+                    }
+                )
             }
 
             if (hasAnyAudio) setupAudioEncoders(wantMic, wantSysAudio)
@@ -459,7 +495,7 @@ class ScreenRecordService : Service() {
 
             virtualDisplay = mediaProjection?.createVirtualDisplay(
                 getString(R.string.ScreenRecordService_virtual_display_name),
-                screenWidth, screenHeight, scaledDensity,
+                captureWidth, captureHeight, scaledDensity,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, rotationRenderer?.surface ?: inputSurface, null, null
             )
 
@@ -484,6 +520,12 @@ class ScreenRecordService : Service() {
 
             registerScreenStateReceiver()
 
+            if (configManager.isCameraOverlayEnabled && !CameraOverlayService.isCameraRunning) {
+                mainHandler.post {
+                    CameraPermissionActivity.launch(this)
+                }
+            }
+
         } catch (e: Exception) {
             Log.e(TAG, "Start failed: ${e.message}")
             PrivilegedAccessManager.runAsync(sessionUsesRoot) { restorePrivilegedFeaturesOnStop() }
@@ -497,7 +539,21 @@ class ScreenRecordService : Service() {
         val renderer = rotationRenderer ?: return
         val display = virtualDisplay ?: return
         if (stopRequested || width <= 0 || height <= 0) return
-        val (newWidth, newHeight) = RecordingFrameLayout.captureSize(width, height, captureScale)
+        val is16By9 = configManager.is16By9AspectRatio
+        val (newWidth, newHeight) = if (is16By9) {
+            val scale = if (width < height) {
+                screenWidth.toDouble() / width.toDouble()
+            } else {
+                screenHeight.toDouble() / height.toDouble()
+            }
+            var nw = (width * scale).toInt()
+            var nh = (height * scale).toInt()
+            if (nw % 2 != 0) nw--
+            if (nh % 2 != 0) nh--
+            nw to nh
+        } else {
+            RecordingFrameLayout.captureSize(width, height, captureScale)
+        }
         if (captureWidth == newWidth && captureHeight == newHeight) return
         try {
             display.setSurface(null)

@@ -79,8 +79,19 @@
             android:autoRemoveFromRecents="true"
             android:theme="@style/Theme.ScreenRecorder.Transparent" />
 
+
+        <activity
+            android:name=".ui.activity.YouTubeLiveActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ScreenRecorder" />
+
         <service
             android:name=".recording.ScreenRecordService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection|microphone" />
+
+        <service
+            android:name=".streaming.LiveStreamProjectionService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection|microphone" />
 

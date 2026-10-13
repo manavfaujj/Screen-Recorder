@@ -52,8 +52,13 @@ class ConfigManager(private val context: Context) {
         const val KEY_SHIZUKU_HIDE_SYSTEM_BARS = "shizuku_hide_system_bars"
         const val KEY_SHIZUKU_ENHANCED_AUDIO = "shizuku_enhanced_audio"
         const val KEY_PRIVILEGED_BACKEND = "privileged_backend"
+        const val KEY_ASPECT_RATIO = "aspect_ratio"
         const val BACKEND_SHIZUKU = "shizuku"
         const val BACKEND_ROOT = "root"
+
+        const val ASPECT_RATIO_16_9 = "16_9"
+        const val ASPECT_RATIO_NATIVE = "native"
+        const val DEFAULT_ASPECT_RATIO = ASPECT_RATIO_16_9
 
         const val DEFAULT_MIC_ENABLED = true
         const val DEFAULT_SYSTEM_AUDIO_ENABLED = true
@@ -114,6 +119,13 @@ class ConfigManager(private val context: Context) {
             .let { if (it == BACKEND_ROOT) BACKEND_ROOT else BACKEND_SHIZUKU }
         set(value) = prefs.edit().putString(KEY_PRIVILEGED_BACKEND,
             if (value == BACKEND_ROOT) BACKEND_ROOT else BACKEND_SHIZUKU).apply()
+
+    var aspectRatio: String
+        get() = prefs.getString(KEY_ASPECT_RATIO, DEFAULT_ASPECT_RATIO) ?: DEFAULT_ASPECT_RATIO
+        set(value) = prefs.edit().putString(KEY_ASPECT_RATIO, value).apply()
+
+    val is16By9AspectRatio: Boolean
+        get() = aspectRatio == ASPECT_RATIO_16_9
 
     var isSystemAudioEnabled: Boolean
         get() = prefs.getBoolean(KEY_SYSTEM_AUDIO_ENABLED, DEFAULT_SYSTEM_AUDIO_ENABLED)
@@ -226,6 +238,7 @@ class ConfigManager(private val context: Context) {
         val editor = prefs.edit()
         var changed = false
         if (!prefs.contains(KEY_MIC_ENABLED)) { editor.putBoolean(KEY_MIC_ENABLED, DEFAULT_MIC_ENABLED); changed = true }
+        if (!prefs.contains(KEY_ASPECT_RATIO)) { editor.putString(KEY_ASPECT_RATIO, DEFAULT_ASPECT_RATIO); changed = true }
         if (!prefs.contains(KEY_SYSTEM_AUDIO_ENABLED)) { editor.putBoolean(KEY_SYSTEM_AUDIO_ENABLED, DEFAULT_SYSTEM_AUDIO_ENABLED); changed = true }
         if (!prefs.contains(KEY_VIDEO_QUALITY)) { editor.putString(KEY_VIDEO_QUALITY, DEFAULT_VIDEO_QUALITY); changed = true }
         if (!prefs.contains(KEY_VIDEO_FPS)) { editor.putInt(KEY_VIDEO_FPS, DEFAULT_VIDEO_FPS); changed = true }
@@ -288,12 +301,82 @@ class ConfigManager(private val context: Context) {
     }
 
     /*
-     * Calculates the target resolution based on quality and orientation settings.
+     * Calculates the target resolution based on quality, aspect ratio, and orientation settings.
      */
     fun getScaledResolution(): Pair<Int, Int> {
         val maxRes = getMaxSupportedResolution()
         val physicalWidth = maxRes.first
         val physicalHeight = maxRes.second
+        val minPhysical = min(physicalWidth, physicalHeight)
+
+        if (aspectRatio == ASPECT_RATIO_16_9) {
+            val targetShortSide = when (videoQuality) {
+                QUALITY_4K -> 2160
+                QUALITY_2K -> 1440
+                QUALITY_1080P -> 1080
+                QUALITY_720P -> 720
+                QUALITY_480P -> 480
+                QUALITY_360P -> 360
+                QUALITY_240P -> 240
+                else -> {
+                    when {
+                        minPhysical >= 2160 -> 2160
+                        minPhysical >= 1440 -> 1440
+                        minPhysical >= 1080 -> 1080
+                        minPhysical >= 720 -> 720
+                        minPhysical >= 480 -> 480
+                        minPhysical >= 360 -> 360
+                        else -> minPhysical
+                    }
+                }
+            }
+
+            val targetLongSide = when (targetShortSide) {
+                2160 -> 3840
+                1440 -> 2560
+                1080 -> 1920
+                720 -> 1280
+                480 -> 854
+                360 -> 640
+                240 -> 426
+                else -> {
+                    var l = (targetShortSide.toLong() * 16L / 9L).toInt()
+                    if (l % 2 != 0) l--
+                    l
+                }
+            }
+
+            var finalWidth: Int
+            var finalHeight: Int
+
+            when (videoOrientation) {
+                ORIENTATION_PORTRAIT -> {
+                    finalWidth = targetShortSide
+                    finalHeight = targetLongSide
+                }
+                ORIENTATION_LANDSCAPE -> {
+                    finalWidth = targetLongSide
+                    finalHeight = targetShortSide
+                }
+                ORIENTATION_AUTO -> {
+                    if (physicalWidth > physicalHeight) {
+                        finalWidth = targetLongSide
+                        finalHeight = targetShortSide
+                    } else {
+                        finalWidth = targetShortSide
+                        finalHeight = targetLongSide
+                    }
+                }
+                else -> {
+                    finalWidth = targetShortSide
+                    finalHeight = targetLongSide
+                }
+            }
+
+            if (finalWidth % 2 != 0) finalWidth--
+            if (finalHeight % 2 != 0) finalHeight--
+            return Pair(finalWidth, finalHeight)
+        }
 
         val targetShortSide = when (videoQuality) {
             QUALITY_4K -> 2160

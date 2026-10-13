@@ -19,10 +19,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.haseeb.recorder.R
+import com.haseeb.recorder.camera.CameraOverlayService
 import com.haseeb.recorder.data.ConfigManager
 import com.haseeb.recorder.data.VideoFile
+import com.haseeb.recorder.recording.RecordingStateManager
 import com.haseeb.recorder.recording.ScreenRecordService
 import com.haseeb.recorder.ui.adapter.VideoAdapter
+import com.haseeb.recorder.ui.dialog.LiveStreamBottomSheet
 import com.haseeb.recorder.ui.dialog.SettingsBottomSheet
 import com.haseeb.recorder.util.*
 import com.haseeb.recorder.databinding.ActivityMainBinding
@@ -79,6 +82,7 @@ class MainActivity : AppCompatActivity() {
         binding.appBarLayout.applySystemBarInsets()
         binding.nestedScrollView.applyBottomInsets()
         binding.fabRecord.applyBottomMargin()
+        binding.fabLiveStream.applyBottomMargin()
         
         initializeComponents()
         setupRecyclerView()
@@ -138,6 +142,44 @@ class MainActivity : AppCompatActivity() {
         binding.btnSettings.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             SettingsBottomSheet.newInstance().show(supportFragmentManager, "SettingsBottomSheet")
+        }
+
+        binding.btnFacecam.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            RecordingStateManager.toggleCamera(this)
+            it.postDelayed({ syncRecordingUi() }, 300)
+        }
+
+        binding.btnFacecam.setOnLongClickListener {
+            if (CameraOverlayService.isCameraRunning) {
+                CameraOverlayService.switchCamera(this)
+                android.widget.Toast.makeText(this, "Facecam camera flipped", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                RecordingStateManager.toggleCamera(this)
+            }
+            true
+        }
+
+        binding.btnLiveStream.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            val intent = Intent(this, YouTubeLiveActivity::class.java)
+            startActivity(intent)
+        }
+
+        binding.btnLiveStream.setOnLongClickListener {
+            LiveStreamBottomSheet().show(supportFragmentManager, "LiveStreamBottomSheet")
+            true
+        }
+
+        binding.fabLiveStream.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+            LiveStreamBottomSheet().show(supportFragmentManager, "LiveStreamBottomSheet")
+        }
+
+        binding.fabLiveStream.setOnLongClickListener {
+            val intent = Intent(this, YouTubeLiveActivity::class.java)
+            startActivity(intent)
+            true
         }
     }
 
@@ -209,6 +251,8 @@ class MainActivity : AppCompatActivity() {
             setIconResource(if (isRecording) R.drawable.ic_stop else R.drawable.ic_screen_record)
             text = if (isRecording) getString(R.string.MainActivity_record_stop) else getString(R.string.MainActivity_record_start)
         }
+        val isCameraRunning = CameraOverlayService.isCameraRunning
+        binding.btnFacecam.setIconResource(if (isCameraRunning) R.drawable.ic_camera_switch else R.drawable.ic_camera)
     }
 
     /*

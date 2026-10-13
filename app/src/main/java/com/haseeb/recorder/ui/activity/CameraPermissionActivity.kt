@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -15,7 +16,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.haseeb.recorder.R
 import com.haseeb.recorder.camera.CameraOverlayService
-import com.haseeb.recorder.recording.RecordingStateManager
 import com.haseeb.recorder.util.LocaleHelper
 
 /** Establish a resumed activity before starting a service with while-in-use camera access. */
@@ -51,7 +51,6 @@ class CameraPermissionActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (isFinishing || started || permissionPending) return
-        if (!RecordingStateManager.isRecording) { finish(); return }
         if (CameraOverlayService.isCameraRunning) {
             stopService(Intent(this, CameraOverlayService::class.java))
             finish()
@@ -63,7 +62,10 @@ class CameraPermissionActivity : Activity() {
             return
         }
         if (!Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, R.string.camera_preview_unavailable, Toast.LENGTH_LONG).show()
+            Toast.makeText(this, R.string.camera_preview_overlay_required, Toast.LENGTH_LONG).show()
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            } catch (_: Exception) {}
             finish()
             return
         }

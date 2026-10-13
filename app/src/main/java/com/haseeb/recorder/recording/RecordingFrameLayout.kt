@@ -13,6 +13,14 @@ internal data class RecordingFrameLayout(val x: Int, val y: Int, val width: Int,
             return RecordingFrameLayout((canvasWidth - width) / 2, (canvasHeight - height) / 2, width, height)
         }
 
+        fun crop(sourceWidth: Int, sourceHeight: Int, canvasWidth: Int, canvasHeight: Int): RecordingFrameLayout {
+            require(sourceWidth > 0 && sourceHeight > 0 && canvasWidth > 0 && canvasHeight > 0)
+            val scale = maxOf(canvasWidth.toDouble() / sourceWidth, canvasHeight.toDouble() / sourceHeight)
+            val width = (sourceWidth * scale).roundToInt().coerceAtLeast(1)
+            val height = (sourceHeight * scale).roundToInt().coerceAtLeast(1)
+            return RecordingFrameLayout((canvasWidth - width) / 2, (canvasHeight - height) / 2, width, height)
+        }
+
         // Retain the selected quality while the source display or app window changes size.
         fun captureSize(width: Int, height: Int, scale: Double): Pair<Int, Int> {
             require(width > 0 && height > 0 && scale > 0 && scale.isFinite())

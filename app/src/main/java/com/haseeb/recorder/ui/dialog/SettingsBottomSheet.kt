@@ -133,6 +133,12 @@ class SettingsBottomSheet : BottomSheetDialogFragment(), RecordingStateManager.S
         }
         binding.buttonGroupCountdown.check(countdownButtonId)
 
+        val aspectRatioButtonId = when (configManager.aspectRatio) {
+            ConfigManager.ASPECT_RATIO_NATIVE -> R.id.btnAspectRatioNative
+            else -> R.id.btnAspectRatio16x9
+        }
+        binding.buttonGroupAspectRatio.check(aspectRatioButtonId)
+
         var qualityButtonId = when (configManager.videoQuality) {
             ConfigManager.QUALITY_MAX -> R.id.btnQualityMax
             ConfigManager.QUALITY_4K -> R.id.btnQuality4K
@@ -375,6 +381,16 @@ class SettingsBottomSheet : BottomSheetDialogFragment(), RecordingStateManager.S
                     R.id.btnCountdown10s -> 10
                     else -> 3
                 }
+            }
+        }
+
+        binding.buttonGroupAspectRatio.addOnButtonCheckedListener { _: MaterialButtonToggleGroup, checkedId: Int, isChecked: Boolean ->
+            if (isChecked) {
+                configManager.aspectRatio = when (checkedId) {
+                    R.id.btnAspectRatioNative -> ConfigManager.ASPECT_RATIO_NATIVE
+                    else -> ConfigManager.ASPECT_RATIO_16_9
+                }
+                setupDynamicBitrates()
             }
         }
 

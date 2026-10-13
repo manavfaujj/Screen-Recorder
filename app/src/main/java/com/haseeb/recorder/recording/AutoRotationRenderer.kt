@@ -19,6 +19,9 @@ internal class AutoRotationRenderer(
     encoderSurface: Surface,
     private val canvasWidth: Int,
     private val canvasHeight: Int,
+    private val initialCaptureWidth: Int = canvasWidth,
+    private val initialCaptureHeight: Int = canvasHeight,
+    private val cropToFill: Boolean = false,
     private val onFailure: (Exception) -> Unit
 ) : AutoCloseable {
     private val thread = HandlerThread("AutoRotationRenderer").apply { start() }
@@ -57,11 +60,48 @@ internal class AutoRotationRenderer(
         val resize = FutureTask {
             if (!closed) {
                 surfaceTexture?.setDefaultBufferSize(width, height)
-                viewport = RecordingFrameLayout.fit(width, height, canvasWidth, canvasHeight)
+                updateCrop(width, height)
             }
         }
         handler.post(resize)
         resize.get(3, TimeUnit.SECONDS)
+    }
+
+    private fun updateCrop(width: Int, height: Int) {
+        if (cropToFill) {
+            val sourceRatio = width.toDouble() / height.toDouble()
+            val canvasRatio = canvasWidth.toDouble() / canvasHeight.toDouble()
+            val (u0, u1, v0, v1) = if (canvasRatio > sourceRatio) {
+                val fraction = (sourceRatio / canvasRatio).coerceIn(0.1, 1.0)
+                val vCrop = ((1.0 - fraction) / 2.0).toFloat()
+                listOf(0f, 1f, vCrop, 1f - vCrop)
+            } else if (canvasRatio < sourceRatio) {
+                val fraction = (canvasRatio / sourceRatio).coerceIn(0.1, 1.0)
+                val uCrop = ((1.0 - fraction) / 2.0).toFloat()
+                listOf(uCrop, 1f - uCrop, 0f, 1f)
+            } else {
+                listOf(0f, 1f, 0f, 1f)
+            }
+            viewport = RecordingFrameLayout(0, 0, canvasWidth, canvasHeight)
+            vertices.position(0)
+            vertices.put(floatArrayOf(
+                -1f, -1f, u0, v0,
+                 1f, -1f, u1, v0,
+                -1f,  1f, u0, v1,
+                 1f,  1f, u1, v1
+            ))
+            vertices.position(0)
+        } else {
+            viewport = RecordingFrameLayout.fit(width, height, canvasWidth, canvasHeight)
+            vertices.position(0)
+            vertices.put(floatArrayOf(
+                -1f, -1f, 0f, 0f,
+                 1f, -1f, 1f, 0f,
+                -1f,  1f, 0f, 1f,
+                 1f,  1f, 1f, 1f
+            ))
+            vertices.position(0)
+        }
     }
 
     private fun initialize(encoderSurface: Surface) {
@@ -104,10 +144,11 @@ internal class AutoRotationRenderer(
         GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
         surfaceTexture = SurfaceTexture(texture).apply {
-            setDefaultBufferSize(canvasWidth, canvasHeight)
+            setDefaultBufferSize(initialCaptureWidth, initialCaptureHeight)
             setOnFrameAvailableListener({ drawFrame() }, handler)
         }
         captureSurface = Surface(surfaceTexture)
+        updateCrop(initialCaptureWidth, initialCaptureHeight)
     }
 
     private fun shader(type: Int, source: String): Int {

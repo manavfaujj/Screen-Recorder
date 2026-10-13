@@ -47,4 +47,18 @@ class RecordingFrameLayoutTest {
     @Test(expected = IllegalArgumentException::class) fun invalidCanvasIsRejected() {
         RecordingFrameLayout.fit(1080, 1920, 0, 1920)
     }
+    @Test fun cropFills16By9CanvasFrom20By9Portrait() {
+        val frame = RecordingFrameLayout.crop(1080, 2400, 1080, 1920)
+        assertEquals(0, frame.x)
+        assertEquals(1080, frame.width)
+        assertEquals(2400, frame.height)
+        assertEquals(-240, frame.y)
+    }
+    @Test fun cropFills16By9CanvasFrom20By9Landscape() {
+        val frame = RecordingFrameLayout.crop(2400, 1080, 1920, 1080)
+        assertEquals(0, frame.y)
+        assertEquals(1080, frame.height)
+        assertEquals(2400, frame.width)
+        assertEquals(-240, frame.x)
+    }
 }
